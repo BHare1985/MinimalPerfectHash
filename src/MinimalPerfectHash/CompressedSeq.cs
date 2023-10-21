@@ -22,12 +22,12 @@ namespace MinimalPerfectHash;
 [Serializable]
 internal class CompressedSeq
 {
-    private uint[] lengthRems;
-    private uint n;
-    private uint remR;
-    private Select sel;
-    private uint[] storeTable;
-    private uint totalLength;
+    private uint[] _lengthRems;
+    private uint _n;
+    private uint _remR;
+    private Select _sel;
+    private uint[] _storeTable;
+    private uint _totalLength;
 
     public CompressedSeq()
     {
@@ -37,49 +37,49 @@ internal class CompressedSeq
     {
         var i = 0;
         var lengthRemsLength = span[i++];
-        lengthRems = new uint[lengthRemsLength];
+        _lengthRems = new uint[lengthRemsLength];
         for (var j = 0; j != lengthRemsLength; j++)
-            lengthRems[j] = span[i++];
+            _lengthRems[j] = span[i++];
 
-        n = span[i++];
-        remR = span[i++];
+        _n = span[i++];
+        _remR = span[i++];
 
-        sel = new Select(span.Slice(i));
-        i += sel.Size / sizeof(uint);
+        _sel = new Select(span.Slice(i));
+        i += _sel.Size / sizeof(uint);
 
         var storeTableLength = span[i++];
-        storeTable = new uint[storeTableLength];
+        _storeTable = new uint[storeTableLength];
         for (var j = 0; j != storeTableLength; j++)
-            storeTable[j] = span[i++];
+            _storeTable[j] = span[i++];
 
-        totalLength = span[i++];
+        _totalLength = span[i];
     }
 
-    internal int Size => sizeof(uint) * (5 + lengthRems.Length + storeTable.Length) + sel.Size;
+    internal int Size => sizeof(uint) * (5 + _lengthRems.Length + _storeTable.Length) + _sel.Size;
 
     internal void Dump(Span<uint> span)
     {
         var i = 0;
-        var lengthRemsLength = (uint)lengthRems.Length;
+        var lengthRemsLength = (uint)_lengthRems.Length;
         span[i++] = lengthRemsLength;
         for (var j = 0; j != lengthRemsLength; j++)
-            span[i++] = lengthRems[j];
+            span[i++] = _lengthRems[j];
 
-        span[i++] = n;
-        span[i++] = remR;
+        span[i++] = _n;
+        span[i++] = _remR;
 
-        sel.Dump(span.Slice(i));
-        i += sel.Size / sizeof(uint);
+        _sel.Dump(span.Slice(i));
+        i += _sel.Size / sizeof(uint);
 
-        var storeTableLength = (uint)storeTable.Length;
+        var storeTableLength = (uint)_storeTable.Length;
         span[i++] = storeTableLength;
         for (var j = 0; j != storeTableLength; j++)
-            span[i++] = storeTable[j];
+            span[i++] = _storeTable[j];
 
-        span[i++] = totalLength;
+        span[i] = _totalLength;
     }
 
-    private static uint ILog2(uint x)
+    private static uint Log2(uint x)
     {
         uint res = 0;
 
@@ -98,76 +98,76 @@ internal class CompressedSeq
         // lengths: represents lengths of encoded values	
         var lengths = new uint[n];
 
-        this.n = n;
-        totalLength = 0;
+        this._n = n;
+        _totalLength = 0;
 
-        for (i = 0; i < this.n; i++)
+        for (i = 0; i < this._n; i++)
             if (valsTable[i] == 0)
             {
                 lengths[i] = 0;
             }
             else
             {
-                lengths[i] = ILog2(valsTable[i] + 1);
-                totalLength += lengths[i];
+                lengths[i] = Log2(valsTable[i] + 1);
+                _totalLength += lengths[i];
             }
 
-        storeTable = new uint[(totalLength + 31) >> 5];
-        totalLength = 0;
+        _storeTable = new uint[(_totalLength + 31) >> 5];
+        _totalLength = 0;
 
-        for (i = 0; i < this.n; i++)
+        for (i = 0; i < this._n; i++)
         {
             if (valsTable[i] == 0)
                 continue;
             var storedValue = valsTable[i] - ((1U << (int)lengths[i]) - 1U);
-            BitBool.SetBitsAtPos(storeTable, totalLength, storedValue, lengths[i]);
-            totalLength += lengths[i];
+            BitBool.SetBitsAtPos(_storeTable, _totalLength, storedValue, lengths[i]);
+            _totalLength += lengths[i];
         }
 
-        remR = ILog2(totalLength / this.n);
+        _remR = Log2(_totalLength / this._n);
 
-        if (remR == 0) remR = 1;
+        if (_remR == 0) _remR = 1;
 
-        lengthRems = new uint[(this.n * remR + 0x1f) >> 5];
+        _lengthRems = new uint[(this._n * _remR + 0x1f) >> 5];
 
-        var remsMask = (1U << (int)remR) - 1U;
-        totalLength = 0;
+        var remsMask = (1U << (int)_remR) - 1U;
+        _totalLength = 0;
 
-        for (i = 0; i < this.n; i++)
+        for (i = 0; i < this._n; i++)
         {
-            totalLength += lengths[i];
-            BitBool.SetBitsValue(lengthRems, i, totalLength & remsMask, remR, remsMask);
-            lengths[i] = totalLength >> (int)remR;
+            _totalLength += lengths[i];
+            BitBool.SetBitsValue(_lengthRems, i, _totalLength & remsMask, _remR, remsMask);
+            lengths[i] = _totalLength >> (int)_remR;
         }
 
-        sel = new Select();
+        _sel = new Select();
 
-        sel.Generate(lengths, this.n, totalLength >> (int)remR);
+        _sel.Generate(lengths, this._n, _totalLength >> (int)_remR);
     }
 
     public uint Query(uint idx)
     {
         uint selRes;
         uint encIdx;
-        var remsMask = (uint)((1 << (int)remR) - 1);
+        var remsMask = (uint)((1 << (int)_remR) - 1);
 
         if (idx == 0)
         {
             encIdx = 0;
-            selRes = sel.Query(idx);
+            selRes = _sel.Query(idx);
         }
         else
         {
-            selRes = sel.Query(idx - 1);
-            encIdx = (selRes - (idx - 1)) << (int)remR;
-            encIdx += BitBool.GetBitsValue(lengthRems, idx - 1, remR, remsMask);
-            selRes = sel.NextQuery(selRes);
+            selRes = _sel.Query(idx - 1);
+            encIdx = (selRes - (idx - 1)) << (int)_remR;
+            encIdx += BitBool.GetBitsValue(_lengthRems, idx - 1, _remR, remsMask);
+            selRes = _sel.NextQuery(selRes);
         }
 
-        var encLength = (selRes - idx) << (int)remR;
-        encLength += BitBool.GetBitsValue(lengthRems, idx, remR, remsMask);
+        var encLength = (selRes - idx) << (int)_remR;
+        encLength += BitBool.GetBitsValue(_lengthRems, idx, _remR, remsMask);
         encLength -= encIdx;
         if (encLength == 0) return 0;
-        return BitBool.GetBitsAtPos(storeTable, encIdx, encLength) + (uint)((1 << (int)encLength) - 1);
+        return BitBool.GetBitsAtPos(_storeTable, encIdx, encLength) + (uint)((1 << (int)encLength) - 1);
     }
 }

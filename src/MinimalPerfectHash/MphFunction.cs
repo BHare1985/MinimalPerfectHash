@@ -27,16 +27,16 @@ namespace MinimalPerfectHash;
 [Serializable]
 public class MphFunction
 {
-    private readonly CompressedSeq cs;
-    private readonly uint hashSeed;
-    private readonly uint nBuckets;
+    private readonly CompressedSeq _cs;
+    private readonly uint _hashSeed;
+    private readonly uint _nBuckets;
 
     private MphFunction(CompressedSeq cs, uint hashSeed, uint maxValue, uint nBuckets)
     {
-        this.cs = cs;
-        this.hashSeed = hashSeed;
-        this.MaxValue = maxValue;
-        this.nBuckets = nBuckets;
+        _cs = cs;
+        _hashSeed = hashSeed;
+        MaxValue = maxValue;
+        _nBuckets = nBuckets;
     }
 
     private protected MphFunction()
@@ -46,6 +46,7 @@ public class MphFunction
     /// <summary>
     ///     Create a minimum perfect hash function for the provided key set
     /// </summary>
+    /// <param name="keys">Key source</param>
     /// <param name="loadFactor">Load factor (.5 &gt; c &gt; .99)</param>
     public MphFunction(IList<byte[]> keys, double loadFactor) : this(keys, (uint)keys.Count, loadFactor)
     {
@@ -65,7 +66,7 @@ public class MphFunction
         var iteration = 100;
         for (;; iteration--)
         {
-            if (!buckets.MappingPhase(out hashSeed, out var maxBucketSize))
+            if (!buckets.MappingPhase(out _hashSeed, out var maxBucketSize))
                 throw new Exception("Mapping failure. Duplicate keys?");
 
             var sortedLists = buckets.OrderingPhase(maxBucketSize);
@@ -77,21 +78,21 @@ public class MphFunction
             if (iteration <= 0) throw new Exception("Too many iteration");
         }
 
-        cs = new CompressedSeq();
-        cs.Generate(dispTable, (uint)dispTable.Length);
-        nBuckets = buckets.BucketCount;
+        _cs = new CompressedSeq();
+        _cs.Generate(dispTable, (uint)dispTable.Length);
+        _nBuckets = buckets.BucketCount;
         MaxValue = buckets.BinCount;
     }
 
     /// <summary>
-    ///     Maximun value of the hash function.
+    ///     Maximum value of the hash function.
     /// </summary>
     public uint MaxValue { get; }
 
     /// <summary>
     ///     The deep size of the entire object in bytes.
     /// </summary>
-    public int Size => sizeof(uint) * 3 + cs.Size;
+    public int Size => sizeof(uint) * 3 + _cs.Size;
 
     /// <summary>
     ///     Compute the hash value associate with the key
@@ -101,12 +102,12 @@ public class MphFunction
     public uint GetHash(ReadOnlySpan<byte> key)
     {
         Span<uint> hl = stackalloc uint[3];
-        JenkinsHash.HashVector(hashSeed, key, hl);
-        var g = hl[0] % nBuckets;
+        JenkinsHash.HashVector(_hashSeed, key, hl);
+        var g = hl[0] % _nBuckets;
         var f = hl[1] % MaxValue;
         var h = hl[2] % (MaxValue - 1) + 1;
 
-        var disp = cs.Query(g);
+        var disp = _cs.Query(g);
         var probe0Num = disp % MaxValue;
         var probe1Num = disp / MaxValue;
         var position = (uint)((f + (ulong)h * probe0Num + probe1Num) % MaxValue);
@@ -123,7 +124,7 @@ public class MphFunction
     public void Dump(Span<byte> bytes)
     {
         if (bytes.Length < Size)
-            throw new ArgumentException("Span is shorter than the size of this funciton. See `Size` property.",
+            throw new ArgumentException("Span is shorter than the size of this function. See `Size` property.",
                 nameof(bytes));
         DumpInternal(bytes);
     }
@@ -132,10 +133,10 @@ public class MphFunction
     {
         var span = MemoryMarshal.Cast<byte, uint>(bytes);
         var i = 0;
-        span[i++] = hashSeed;
+        span[i++] = _hashSeed;
         span[i++] = MaxValue;
-        span[i++] = nBuckets;
-        cs.Dump(span.Slice(i));
+        span[i++] = _nBuckets;
+        _cs.Dump(span.Slice(i));
     }
 
     public static MphFunction Load(ReadOnlySpan<byte> bytes)

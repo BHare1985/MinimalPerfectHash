@@ -22,33 +22,33 @@ namespace MinimalPerfectHash;
 [Serializable]
 internal class Select
 {
-    private uint[] bitsVec;
+    private uint[] _bitsVec;
 
-    private uint n, m;
-    private uint[] selectTable;
+    private uint _n, _m;
+    private uint[] _selectTable;
 
     internal Select(ReadOnlySpan<uint> span)
     {
         var i = 0;
-        n = span[i++];
-        m = span[i++];
+        _n = span[i++];
+        _m = span[i++];
 
         var bitsVecLength = span[i++];
-        bitsVec = new uint[bitsVecLength];
+        _bitsVec = new uint[bitsVecLength];
         for (var j = 0; j != bitsVecLength; j++)
-            bitsVec[j] = span[i++];
+            _bitsVec[j] = span[i++];
 
         var selectTableLength = span[i++];
-        selectTable = new uint[selectTableLength];
+        _selectTable = new uint[selectTableLength];
         for (var j = 0; j != selectTableLength; j++)
-            selectTable[j] = span[i++];
+            _selectTable[j] = span[i++];
     }
 
     public Select()
     {
     }
 
-    internal int Size => (4 + bitsVec.Length + selectTable.Length) * sizeof(uint);
+    internal int Size => (4 + _bitsVec.Length + _selectTable.Length) * sizeof(uint);
 
     private static void Insert0(ref uint buffer)
     {
@@ -64,30 +64,30 @@ internal class Select
     internal void Dump(Span<uint> span)
     {
         var i = 0;
-        span[i++] = n;
-        span[i++] = m;
+        span[i++] = _n;
+        span[i++] = _m;
 
-        var bitsVecLength = (uint)bitsVec.Length;
+        var bitsVecLength = (uint)_bitsVec.Length;
         span[i++] = bitsVecLength;
         for (var j = 0; j != bitsVecLength; j++)
-            span[i++] = bitsVec[j];
+            span[i++] = _bitsVec[j];
 
-        var selectTableLength = (uint)selectTable.Length;
+        var selectTableLength = (uint)_selectTable.Length;
         span[i++] = selectTableLength;
         for (var j = 0; j != selectTableLength; j++)
-            span[i++] = selectTable[j];
+            span[i++] = _selectTable[j];
     }
 
     public void Generate(uint[] keysVec, uint n, uint m)
     {
         uint buffer = 0;
-        this.n = n;
-        this.m = m;
-        var nbits = this.n + this.m;
+        this._n = n;
+        this._m = m;
+        var nbits = this._n + this._m;
         var vecSize = (nbits + 0x1f) >> 5;
-        var selTableSize = (this.n >> 7) + 1;
-        bitsVec = new uint[vecSize];
-        selectTable = new uint[selTableSize];
+        var selTableSize = (this._n >> 7) + 1;
+        _bitsVec = new uint[vecSize];
+        _selectTable = new uint[selTableSize];
         var j = 0;
         var i = j;
         var idx = i;
@@ -99,14 +99,14 @@ internal class Select
                 idx++;
 
                 if ((idx & 0x1f) == 0)
-                    bitsVec[(idx >> 5) - 1] = buffer; // (idx >> 5) = idx/32
+                    _bitsVec[(idx >> 5) - 1] = buffer; // (idx >> 5) = idx/32
                 j++;
 
-                if (j == this.n)
+                if (j == this._n)
                     break;
             }
 
-            if (i == this.m)
+            if (i == this._m)
                 break;
 
             while (keysVec[j] > i)
@@ -115,7 +115,7 @@ internal class Select
                 idx++;
 
                 if ((idx & 0x1f) == 0) // (idx & 0x1f) = idx % 32
-                    bitsVec[(idx >> 5) - 1] = buffer; // (idx >> 5) = idx/32
+                    _bitsVec[(idx >> 5) - 1] = buffer; // (idx >> 5) = idx/32
                 i++;
             }
         }
@@ -123,7 +123,7 @@ internal class Select
         if ((idx & 0x1f) != 0)
         {
             buffer = buffer >> (0x20 - (idx & 0x1f));
-            bitsVec[(idx - 1) >> 5] = buffer;
+            _bitsVec[(idx - 1) >> 5] = buffer;
         }
 
         GenerateSelTable();
@@ -131,14 +131,14 @@ internal class Select
 
     private unsafe void GenerateSelTable()
     {
-        fixed (uint* pptrBitsVec = &bitsVec[0])
+        fixed (uint* pptrBitsVec = &_bitsVec[0])
         {
             var bitsTable = (byte*)pptrBitsVec;
             uint selTableIdx = 0;
             var oneIdx = selTableIdx;
             var vecIdx = oneIdx;
             var partSum = vecIdx;
-            while (oneIdx < n)
+            while (oneIdx < _n)
             {
                 uint oldPartSum;
                 do
@@ -148,7 +148,7 @@ internal class Select
                     vecIdx++;
                 } while (partSum <= oneIdx);
 
-                selectTable[selTableIdx] =
+                _selectTable[selTableIdx] =
                     SelectLookupTable[bitsTable[vecIdx - 1], oneIdx - oldPartSum] + ((vecIdx - 1) << 3);
                 oneIdx += 0x80;
                 selTableIdx++;
@@ -158,11 +158,11 @@ internal class Select
 
     public unsafe uint Query(uint oneIdx)
     {
-        fixed (uint* pptrBitsVec = &bitsVec[0])
+        fixed (uint* pptrBitsVec = &_bitsVec[0])
         {
             uint oldPartSum;
             var bitsTable = (byte*)pptrBitsVec;
-            var vecBitIdx = selectTable[oneIdx >> 7];
+            var vecBitIdx = _selectTable[oneIdx >> 7];
             var vecByteIdx = vecBitIdx >> 3;
             oneIdx &= 0x7f;
             oneIdx += RankLookupTable[bitsTable[vecByteIdx] & ((1 << (int)(vecBitIdx & 7)) - 1)];
@@ -180,7 +180,7 @@ internal class Select
 
     public unsafe uint NextQuery(uint vecBitIdx)
     {
-        fixed (uint* pptrBitsVec = &bitsVec[0])
+        fixed (uint* pptrBitsVec = &_bitsVec[0])
         {
             uint oldPartSum;
             var bitsTable = (byte*)pptrBitsVec;
